@@ -11,7 +11,7 @@
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "git: //github.dev.mht.dyndns.com/Metanome/metanome-tail.git"
+        "url": "git://github.com/Metanome/metanome-tail.git"
     },
     "engines": {
         "node": ">=0.8.x"

@@ -1,12 +1,15 @@
 var CP = require('child_process');
 var Path = require('path');
 
-var Tail = module.exports = function(path) {
+var Tail = module.exports = function(path, prefix) {
 	var self = this;
 	path = Path.normalize(path);
 
-	this.count = 0;
-	this.filter = [];
+	this.prefix = prefix || path;
+	this.counters = {
+		all : 0
+	};
+	this.filters = {};
 
 	var buffer = "";
 	var tail = CP.spawn('tail', [ '-n 0', '-F', path ]);
@@ -18,29 +21,60 @@ var Tail = module.exports = function(path) {
 		var lines = (buffer + data).split(/\r?\n/g);
 		buffer = lines.pop();
 
-		// Remove lines that match a filter
-		lines = lines.filter(function(line) {
-			for ( var f = 0; f < self.filter.length; f++) {
-				if (self.filter[f].test(line))
-					return false;
-			}
-			return true;
-		});
+		// Increment default counter
+		self.counters.all += lines.length;
 
-		this.count += lines.length;
+		// Run each filter against lines and increment respective counters
+		Object.keys(self.filters).forEach(function(key) {
+			self.counters[key] += lines.filter(function(l) {
+				return self.filters[key].test(l);
+			}).length;
+		});
 	});
 
 	this.child = tail;
 };
 
-Tail.prototype.addFilter = function(match) {
-	if (match instanceof RegExp)
-		this.filter.push(match);
+Tail.prototype.addFilter = function(name, match) {
+	if (name == "all")
+		return;
+
+	if (match instanceof RegExp) {
+		this.filters[name] = match;
+		this.counters[name] = 0;
+	}
+};
+
+Tail.prototype.removeFilter = function(name) {
+	if (name == "all")
+		return;
+
+	delete this.filters[name];
+	delete this.counters[name];
 };
 
 Tail.prototype.run = function(callback) {
-	callback(null, {
-		'syslog.messages' : this.count
+	var self = this;
+
+	// Prepend metric prefix to counters
+	var metrics = {};
+	Object.keys(this.counters).forEach(function(key) {
+		var name = key;
+		if (self.prefix)
+			name = self.prefix + '.' + name;
+
+		metrics[name] = self.counters[key];
 	});
-	this.count = 0;
+
+	callback(null, metrics);
+
+	// Reset counters
+	Object.keys(this.counters).forEach(function(key) {
+		self.counters[key] = 0;
+	});
+};
+
+Tail.prototype.cleanup = function() {
+	this.child.disconnect();
+	this.child.kill();
 };
