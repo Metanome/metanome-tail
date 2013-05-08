@@ -8,6 +8,10 @@
         "name": "John Manero",
         "email": "jmanero@dyn.com"
     },
+    "contributors" : [{
+        "name": "John Manero",
+        "email": "jmanero@dyn.com"
+    }],
     "license": "MIT",
     "repository": {
         "type": "git",
