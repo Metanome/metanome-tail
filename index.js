@@ -1,18 +1,35 @@
 var CP = require('child_process');
 var Path = require('path');
 
-var Tail = module.exports = function(path, prefix) {
+var Tail = module.exports = function(options) {
 	var self = this;
+	
+	var path = options.path || options;
 	path = Path.normalize(path);
-
-	this.prefix = prefix || path;
+	
+	this.root = options.root;
+	this.prefix = options.prefix;
 	this.counters = {
 		all : 0
 	};
-	this.filters = {};
+	this.filters = {
+		all : /./
+	};
+	
+	var command = "tail -n 0 -F " + path;
+	
+	// SSH Tunnel
+	if(options.host) {
+		command = options.host + " '" + command + "'";
+		if(options.key)
+			command = "-i " + options.key + " " + command;
+		
+		command = "ssh -t " + command;
+	}
 
+	// Line Reader
 	var buffer = "";
-	var tail = CP.spawn('tail', [ '-n 0', '-F', path ]);
+	var tail = CP.spawn(command);
 	tail.stdout.on('data', function(data) {
 		if (data instanceof Buffer)
 			data = data.toString('utf8');
@@ -20,9 +37,6 @@ var Tail = module.exports = function(path, prefix) {
 		// Split lines and buffer trailing fragment
 		var lines = (buffer + data).split(/\r?\n/g);
 		buffer = lines.pop();
-
-		// Increment default counter
-		self.counters.all += lines.length;
 
 		// Run each filter against lines and increment respective counters
 		Object.keys(self.filters).forEach(function(key) {
@@ -36,9 +50,6 @@ var Tail = module.exports = function(path, prefix) {
 };
 
 Tail.prototype.addFilter = function(name, match) {
-	if (name == "all")
-		return;
-
 	if (match instanceof RegExp) {
 		this.filters[name] = match;
 		this.counters[name] = 0;
@@ -46,9 +57,6 @@ Tail.prototype.addFilter = function(name, match) {
 };
 
 Tail.prototype.removeFilter = function(name) {
-	if (name == "all")
-		return;
-
 	delete this.filters[name];
 	delete this.counters[name];
 };
@@ -56,14 +64,16 @@ Tail.prototype.removeFilter = function(name) {
 Tail.prototype.run = function(callback) {
 	var self = this;
 
-	// Prepend metric prefix to counters
+	// Prepend metric name to counters
 	var metrics = {};
 	Object.keys(this.counters).forEach(function(key) {
 		var name = key;
 		if (self.prefix)
 			name = self.prefix + '.' + name;
 
-		metrics[name] = self.counters[key];
+		metrics[name] = {
+			value : self.counters[key]
+		}
 	});
 
 	callback(null, metrics);
