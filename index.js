@@ -3,10 +3,10 @@ var Path = require('path');
 
 var Tail = module.exports = function(options) {
 	var self = this;
-	
+
 	var path = options.path || options;
 	path = Path.normalize(path);
-	
+
 	this.root = options.root;
 	this.prefix = options.prefix;
 	this.counters = {
@@ -15,24 +15,36 @@ var Tail = module.exports = function(options) {
 	this.filters = {
 		all : /./
 	};
-	
-	var command = "tail -n 0 -F " + path;
-	
+
+	var command = "tail";
+	var params = [ '-n0', '-F', path ];
+
 	// SSH Tunnel
-	if(options.host) {
-		command = options.host + " '" + command + "'";
-		if(options.key)
-			command = "-i " + options.key + " " + command;
-		
-		command = "ssh -t " + command;
+	if (options.host) {
+		command = "ssh";
+		params.unshift(options.host, 'tail');
+
+		// SSH Key
+		if (options.key)
+			params.unshift("-i", options.key);
 	}
 
 	// Line Reader
 	var buffer = "";
-	var tail = CP.spawn(command);
+	var tail = CP.spawn(command, params);
+
+	if (options.debug) {
+		tail.stderr.setEncoding('utf8');
+		tail.stderr.on('data', function(data) {
+			console.log("ERROR: " + data);
+		});
+	}
+
 	tail.stdout.on('data', function(data) {
 		if (data instanceof Buffer)
 			data = data.toString('utf8');
+
+		console.log(data);
 
 		// Split lines and buffer trailing fragment
 		var lines = (buffer + data).split(/\r?\n/g);
